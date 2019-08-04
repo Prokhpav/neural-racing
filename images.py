@@ -16,20 +16,20 @@ class Settings:
     screen_size = (800, 600)
     fps = 60
 
-    speed_change = 0.2 / fps
-    rotation_change = 1 / fps
+    speed_change = 5 / fps
+    rotation_change = 2 / fps
 
     track_quality = 10
     track_input_rate = 5
 
-    rotations = np.radians(np.arange(-60, 60.1, 10))
+    rotations = np.radians(np.arange(-90, 90.1, 5))
     # rotations = np.array((0,))
 
-    min_speed = 0.05
-    max_speed = 0.25
+    min_speed = 0.0
+    max_speed = 5
 
-    car_size = [50, 75]
-    car_image = pygame.transform.rotate(pygame.transform.scale(pygame.image.load('car1.png'), car_size), np.pi / 2)
+    car_size = [30, 45]
+    car_image = pygame.transform.rotate(pygame.transform.scale(pygame.image.load('car1.png'), car_size), 90)
 
 
 class Globals:
@@ -107,21 +107,32 @@ class Globals:
         w, h = (a_pos[0] - b_pos[0]), (a_pos[1] - b_pos[1])
         Globals.start_speed = min(max((w ** 2 + h ** 2) ** 0.5 / Settings.screen_size[1] / 2,
                                       Settings.min_speed), Settings.max_speed)
-        if w >= 0:
-            Globals.start_rotation = np.pi * 1.5 - np.arctan(h / w if w != 0 else 10 ** 7)
-        else:
-            Globals.start_rotation = np.pi * 0.5 - np.arctan(h / w if w != 0 else 10 ** 7)
+        Globals.start_rotation = np.arctan(h / w if w != 0 else 10 ** 7)
         Globals.track = track
         Globals.track_to_draw = track
 
 
+def d(a, b):
+    return a / b if b != 0 else 10 ** 7
+
+
 def get_intersect_point(tang, pos1, pos2):  # vector: (1, np.tan(rotation)) - остался только np.tan; A: point; B: point
-    h, w = (pos1[1] - pos2[1]), (pos1[0] - pos2[0])
-    f = h / w if w != 0 else 10 ** 7
-    # print(f, tang)
-    x = f * pos1[0] / (f - tang)
-    y = tang * x
-    return [x, y]
+    return get_interpos([(0, 0), (1, tang)], [pos1, pos2])
+    # h, w = (pos1[1] - pos2[1]), (pos1[0] - pos2[0])
+    # f = h / w if w != 0 else 10 ** 7
+    # # print(f, tang)
+    # x = f * pos1[0] / (f - tang)
+    # y = tang * x
+    # return [x, y]
+
+
+def get_interpos(l1, l2):
+    f1, f2 = [d(l[0][1] - l[1][1], l[0][0] - l[1][0]) for l in (l1, l2)]
+    if f1 == f2:
+        return False
+    px = (f1 * l1[0][0] - l1[0][1] - (f2 * l2[0][0] - l2[0][1])) / (f1 - f2)
+    py = l1[0][1] + f1 * (px - l1[0][0])
+    return [px, py]
 
 
 class NeuralCar:
@@ -141,43 +152,39 @@ class NeuralCar:
 
     def update_variables(self, accelerate, rotate):
         self.speed = min(max(self.speed + accelerate, Settings.min_speed), Settings.max_speed)
-        rotate *= (self.speed / Settings.max_speed) ** 0.7
+        rotate *= (self.speed / Settings.max_speed) ** 0.5
         self.rotation += rotate
-        self.pos = [self.pos[0] + self.speed * np.sin(self.rotation), self.pos[1] + self.speed * np.cos(self.rotation)]
+        self.pos = [self.pos[0] + self.speed * np.cos(self.rotation), self.pos[1] + self.speed * np.sin(self.rotation)]
         self.fitness += self.speed
 
     def draw(self):
-        image = pygame.transform.rotate(Settings.car_image, np.degrees(self.rotation))
+        image = pygame.transform.rotate(Settings.car_image, -np.degrees(self.rotation))
         Globals.screen.blit(image, [pos - im_size / 2 for pos, im_size in zip(self.pos, image.get_size())])
         pygame.draw.circle(Globals.screen, (255, 0, 0), [int(i) for i in self.pos], 5)
 
     def get_distances(self) -> List[float]:
         distances = []
-        for rotation in ((Settings.rotations + self.rotation) / np.pi) % 2:
-            track = [line.copy() - self.pos for line in Globals.track]
-            if 0.25 < rotation < 1.75:
-                if rotation < 0.75:
-                    track = [np.array([(-p[1], p[0]) for p in line]) for line in track]
-                    rotation += 1.5
-                elif rotation > 1.25:
-                    track = [np.array([(p[1], p[0]) for p in line]) for line in track]
-                    rotation += 0.5
-                else:
-                    track = [np.array([(-p[0], p[1]) for p in line]) for line in track]
-                    rotation += 1
-                rotation = rotation % 2
+        for rot in ((Settings.rotations + self.rotation) / np.pi) % 2:
+            track = [line - self.pos for line in Globals.track]
             dist = 10000
-            tang = np.tan(rotation * np.pi)
+            tang = np.tan(rot * np.pi)
+            r_s = (-1 if 0.5 < rot < 1.5 else 1)
             for line in track:
                 point = line[0]
                 upper = (point[1] >= tang * point[0])
                 for i in range(1, len(line)):
                     point = line[i]
-                    if point[0] >= 0 and upper != (point[1] >= tang * point[0]):
+                    if upper != (point[1] >= tang * point[0]):
                         upper = not upper
-                        inter_pos = get_intersect_point(tang, line[i - 1], line[i])
-                        dist = min(dist, (inter_pos[0] ** 2 + inter_pos[1] ** 2) ** 0.5)
-            distances.append(dist)
+                        inter_pos = get_interpos([(0, 0), (1, tang)], [line[i - 1], line[i]])
+                        if 1:
+                            if tang * inter_pos[1] * r_s >= 0:
+                                dist = min(dist, (inter_pos[0] ** 2 + inter_pos[1] ** 2) ** 0.5)
+                            inter_pos = np.array(inter_pos, dtype=np.int64)
+                            print(round(tang, 3), inter_pos, (tang * inter_pos[1]) / abs(tang * inter_pos[1]))
+                            inter_pos = [inter_pos[0] + int(self.pos[0]), inter_pos[1] + int(self.pos[1])]
+                            pygame.draw.circle(Globals.screen, (255, 0, 0), [int(i) for i in inter_pos], 5)
+            distances.append(max(dist, 30))
         return distances
 
 
@@ -199,13 +206,12 @@ class Epoch:
         Globals.draw_track()
         for car in self.cars:
             car.draw()
-        pygame.display.update()
 
     def get_car_variables(self):
-        d = {}
+        var_dict = {}
         for car in self.cars:
-            d.update(car.get_variables())
-        return d
+            var_dict.update(car.get_variables())
+        return var_dict
 
     def update_car_variables(self, update_dict: dict):
         for car_ID in list(update_dict.keys()):
