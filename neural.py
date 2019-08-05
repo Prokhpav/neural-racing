@@ -11,10 +11,13 @@ class Neural:
         #                              return: list[accelerate, rotate]
         accelerate, rotate = 1, 0  # -1 <= value <= 1
         dists = variables['distances']
+        r = 0.1
         if dists[0] - dists[-1] > 0.01:
-            rotate = -1
+            rotate = -1 + np.random.uniform(0, r)
         elif dists[0] - dists[-1] < -0.01:
-            rotate = 1
+            rotate = 1 + np.random.uniform(0, r)
+        else:
+            rotate = 0 + np.random.uniform(-r, r)
         return [accelerate * Settings.speed_change, rotate * Settings.rotation_change]
 
 

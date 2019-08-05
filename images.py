@@ -32,7 +32,7 @@ class Settings:
     max_speed = 5 * scale
 
     car_size = [30, 45]
-    car_image = pygame.transform.rotate(pygame.transform.scale(pygame.image.load('car1.png'), car_size), 90)
+    car_image = pygame.transform.rotate(pygame.transform.scale(pygame.image.load('sprites/car1.png'), car_size), 90)
 
 
 class Globals:
@@ -45,7 +45,7 @@ class Globals:
     start_speed = 1
     start_rotation = 0
 
-    car_num = 1
+    car_num = 5
 
     track = [np.array([(0, 0), (0, 100), (100, 100), (100, 0)])]
     track_to_draw = track
